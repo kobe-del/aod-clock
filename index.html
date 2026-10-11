@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clock">
+<meta name="theme-color" content="#000000">
+<title>AOD Clock</title>
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    background: #000;
+    overflow: hidden;
+    cursor: none;
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #stage {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 14vw;
+    transition: transform 4s ease-in-out;
+  }
+  .city { text-align: left; }
+  .label {
+    font-size: 1.6vw; font-weight: 500; letter-spacing: 0.08em;
+    color: #5a5a5a; text-transform: uppercase;
+    margin-bottom: 0.6vw;
+  }
+  .time {
+    font-size: 11vw; font-weight: 200; line-height: 1;
+    color: #9a9a9a;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  .meta {
+    margin-top: 1vw;
+    font-size: 1.4vw; font-weight: 400;
+    color: #4a4a4a;
+  }
+  /* 세로 화면: 위아래로 쌓기 */
+  @media (orientation: portrait) {
+    #stage { flex-direction: column; gap: 10vh; }
+    .label { font-size: 3vw; margin-bottom: 1vw; }
+    .time  { font-size: 22vw; }
+    .meta  { font-size: 2.8vw; margin-top: 2vw; }
+  }
+  html { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="city" data-tz="America/Los_Angeles">
+    <div class="label">San Francisco</div>
+    <div class="time">--:--</div>
+    <div class="meta"></div>
+  </div>
+  <div class="city" data-tz="Asia/Seoul">
+    <div class="label">Seoul</div>
+    <div class="time">--:--</div>
+    <div class="meta"></div>
+  </div>
+</div>
+<script>
+  const parts = (date, tz) => Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', weekday: 'short'
+    }).formatToParts(date).map(p => [p.type, p.value])
+  );
+  const dayKey = p => Date.UTC(+p.year, +p.month - 1, +p.day);
+  const KO_DAY = { Sun: '일', Mon: '월', Tue: '화', Wed: '수', Thu: '목', Fri: '금', Sat: '토' };
+
+  function render() {
+    const now = new Date();
+    const cities = [...document.querySelectorAll('.city')];
+    const local = parts(now, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    for (const el of cities) {
+      const p = parts(now, el.dataset.tz);
+      const hour = p.hour === '24' ? '00' : p.hour;
+      el.querySelector('.time').textContent = `${hour}:${p.minute}`;
+      const diff = (dayKey(p) - dayKey(local)) / 86400000;
+      const rel = diff === 0 ? '오늘' : diff > 0 ? '내일' : '어제';
+      const h = +hour;
+      const icon = h >= 6 && h < 18 ? '☀︎' : '☾';
+      el.querySelector('.meta').textContent =
+        `${icon}  ${p.month}월 ${p.day}일 (${KO_DAY[p.weekday]}) · ${rel}`;
+    }
+  }
+
+  // 번인 방지: 매분 위치를 살짝 이동
+  function drift() {
+    const x = (Math.random() - 0.5) * 4;   // vw
+    const y = (Math.random() - 0.5) * 6;   // vh
+    document.getElementById('stage').style.transform = `translate(${x}vw, ${y}vh)`;
+  }
+
+  // 화면 꺼짐 방지 (지원 브라우저에서)
+  let lock = null;
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator && !lock) lock = await navigator.wakeLock.request('screen');
+          lock && lock.addEventListener('release', () => { lock = null; }); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); keepAwake(); } });
+  document.addEventListener('touchend', keepAwake);
+  keepAwake();
+
+  render();
+  setTimeout(() => { render(); drift(); setInterval(() => { render(); drift(); }, 60000); },
+             60000 - (Date.now() % 60000));
+</script>
+</body>
+</html>
